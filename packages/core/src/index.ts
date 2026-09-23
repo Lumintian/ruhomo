@@ -4,3 +4,6 @@ export * from './encoding.ts';
 export * from './document-parser.ts';
 export * from './rule-parser.ts';
 export * from './compiler.ts';
+export * from './url-policy.ts';
+export * from './recipe.ts';
+export * from './naming.ts';
