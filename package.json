@@ -14,7 +14,7 @@
     "test:workerd": "pnpm --filter @ruhomo/worker run test:workerd",
     "test:e2e": "pnpm --filter @ruhomo/web run test:e2e",
     "test:integration": "node scripts/fetch-mihomo.mjs && vitest run --config tests/integration/vitest.config.ts",
-    "bench": "node --experimental-strip-types scripts/bench.ts",
+    "bench": "node scripts/bench.ts",
     "build": "pnpm --filter @ruhomo/web run build && pnpm --filter @ruhomo/worker run build",
     "deploy": "pnpm run build && pnpm --filter @ruhomo/worker run deploy"
   },
