@@ -1,0 +1,14 @@
+# 普通规则与参数
+IP-CIDR,203.0.113.0/24,示例代理,no-resolve
+IP-CIDR6,2001:db8::/32,示例代理,no-resolve
+SRC-IP-CIDR,192.168.1.0/24,DIRECT
+DST-PORT,22/80-443,DIRECT
+NETWORK,udp,DIRECT
+# 正则：量词中的逗号、Windows 路径反斜杠、Unicode
+DOMAIN-REGEX,^foo[0-9]{1,3}\.example\.com$,示例代理
+PROCESS-PATH-REGEX,^C:\\Program Files\\.+\.exe$,DIRECT
+PROCESS-PATH,C:\Windows\System32\curl.exe,DIRECT
+DOMAIN-SUFFIX,例子.测试,默认代理
+# 逻辑规则
+AND,((DOMAIN-SUFFIX,example.com),(DST-PORT,443)),示例代理
+OR,((IP-CIDR,198.51.100.0/24,no-resolve),(NOT,((NETWORK,tcp)))),默认代理

@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // DOM is included only for the runtime-neutral TextEncoder/TextDecoder
+    // typings; core code must not touch browser-only APIs.
+    "lib": ["ES2022", "DOM"],
     "types": []
   },
   "include": ["src"]
