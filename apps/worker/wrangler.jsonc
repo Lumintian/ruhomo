@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ruhomo",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-15",
+  // One deployment serves the SPA (static assets) and the API.
+  // /api/* and /r/* always reach the Worker so they can never be answered by
+  // the SPA fallback; everything else is served from ../web/dist.
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/r/*"]
+  },
+  "vars": {
+    // Absolute origin (optionally with a path prefix) used in generated links.
+    // Set it to your custom domain; when empty the request origin is used.
+    "PUBLIC_BASE_URL": "",
+    // Comma-separated exact hosts or "*.example.com" (strict subdomains only).
+    "SOURCE_ALLOWLIST": "raw.githubusercontent.com,gist.githubusercontent.com",
+    "CACHE_FRESH_SECONDS": "60",
+    "CACHE_STALE_SECONDS": "86400",
+    "FETCH_TIMEOUT_MS": "10000",
+    "MAX_REDIRECTS": "3",
+    "MAX_SOURCE_BYTES": "262144",
+    "MAX_RULES": "5000",
+    "MAX_TARGETS": "128",
+    "MAX_RULE_BYTES": "16384"
+  },
+  // Workers Logs records request URLs, which contain recipe tokens (and
+  // therefore source URLs). It is disabled by default; see docs/deployment.md.
+  "observability": { "enabled": false }
+  // Optional per-client rate limiting (Workers Rate Limiting binding):
+  // "ratelimits": [
+  //   { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } }
+  // ]
+}
