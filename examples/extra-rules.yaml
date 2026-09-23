@@ -1,0 +1,11 @@
+rules:
+  # 科技站点
+  - DOMAIN-SUFFIX,direct.example,DIRECT
+  - DOMAIN-SUFFIX,proxy-one.example,示例代理
+  - DOMAIN-SUFFIX,proxy-two.example,示例代理
+  - DOMAIN-SUFFIX,proxy-three.example,示例代理
+
+  # 国内镜像
+  - DOMAIN-KEYWORD,demo-keyword,默认代理
+  - DOMAIN-SUFFIX,mirror-one.example,DIRECT
+  - DOMAIN-SUFFIX,mirror-two.example,DIRECT

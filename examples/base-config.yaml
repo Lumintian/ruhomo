@@ -1,0 +1,12 @@
+# 原配置片段示意（由你的 Sub-Store 持有，不需要提交给 ruhomo）。
+# 覆写引用的出站目标（这里是 示例代理、默认代理）必须已经存在。
+proxy-groups:
+  - name: 示例代理
+    type: select
+    proxies: [DIRECT]
+  - name: 默认代理
+    type: select
+    proxies: [示例代理, DIRECT]
+rules:
+  - GEOIP,CN,DIRECT
+  - MATCH,默认代理
