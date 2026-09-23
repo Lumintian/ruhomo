@@ -1,0 +1,9 @@
+packages:
+  - packages/*
+  - apps/*
+
+# esbuild and workerd ship platform binaries through install scripts;
+# wrangler, vite and the Workers test pool cannot run without them.
+allowBuilds:
+  esbuild: true
+  workerd: true

@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["packages/*/test", "apps/worker/test", "tests", "scripts", "*.config.ts"],
+  "exclude": ["apps/worker/test/workerd"]
+}
