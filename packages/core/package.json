@@ -1,6 +1,6 @@
 {
   "name": "@ruhomo/core",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "description": "Pure TypeScript core: rule document parsing, Mihomo-compatible rule parsing, grouping, recipes and override generators.",
   "license": "MIT",

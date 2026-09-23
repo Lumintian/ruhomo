@@ -1,12 +1,14 @@
 {
   "name": "ruhomo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Convert an extra Mihomo rules list into per-target HTTP rule-providers and Sub-Store YAML/JS overrides.",
   "license": "MIT",
   "author": "Lumintian",
   "type": "module",
   "scripts": {
+    "preversion": "node scripts/release-version.mjs pre",
+    "postversion": "node scripts/release-version.mjs post",
     "dev": "pnpm -r --parallel --filter @ruhomo/worker --filter @ruhomo/web run dev",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r run typecheck",
