@@ -8,7 +8,7 @@
 pnpm install --frozen-lockfile
 pnpm exec wrangler login          # 在 apps/worker 目录或用 pnpm --filter 执行均可
 # 按需编辑 apps/worker/wrangler.jsonc 的 name / vars
-pnpm deploy                       # = 构建前端 + wrangler deploy
+pnpm run deploy                   # = 构建前端 + wrangler deploy（必须带 run，裸 pnpm deploy 是 pnpm 内置命令）
 ```
 
 `pnpm build` 只做本地构建与 `wrangler deploy --dry-run` 打包检查，不会上传任何东西。本仓库**没有**替你执行过真实部署。

@@ -81,7 +81,7 @@ fixtures/  examples/  docs/  scripts/
 | `pnpm test:integration` | 下载并校验固定版本 Mihomo 测试内核，运行真实内核集成测试 |
 | `pnpm bench` | 本地基准（Node wall time，不代表 Workers CPU 时间） |
 | `pnpm build` | 构建前端并以 `wrangler deploy --dry-run` 打包 Worker |
-| `pnpm deploy` | 构建并部署到你自己的 Cloudflare 账号（需先 `wrangler login`） |
+| `pnpm run deploy` | 构建并部署到你自己的 Cloudflare 账号（需先 `wrangler login`）。注意必须带 `run`：裸 `pnpm deploy` 是 pnpm 的内置命令（部署工作区包），不会执行本脚本 |
 
 ## 文档
 

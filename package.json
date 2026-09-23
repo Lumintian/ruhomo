@@ -7,7 +7,7 @@
   "author": "Lumintian",
   "type": "module",
   "scripts": {
-    "dev": "pnpm -r --parallel --filter ./apps/* run dev",
+    "dev": "pnpm -r --parallel --filter @ruhomo/worker --filter @ruhomo/web run dev",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json && pnpm -r run typecheck",
     "test": "vitest run",
