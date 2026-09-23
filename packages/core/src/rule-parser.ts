@@ -145,10 +145,12 @@ function trimSpaces(s: string): string {
 
 class RuleContext {
   readonly diagnostics: Diagnostic[] = [];
-  constructor(
-    readonly location: Pick<Diagnostic, 'line' | 'column' | 'sourceIndex'>,
-    readonly limits: Limits,
-  ) {}
+  readonly location: Pick<Diagnostic, 'line' | 'column' | 'sourceIndex'>;
+  readonly limits: Limits;
+  constructor(location: Pick<Diagnostic, 'line' | 'column' | 'sourceIndex'>, limits: Limits) {
+    this.location = location;
+    this.limits = limits;
+  }
 
   report(severity: Severity, code: DiagnosticCode, message: string, extra: Partial<Diagnostic> = {}): void {
     this.diagnostics.push({ ...this.location, ...extra, severity, code, message });

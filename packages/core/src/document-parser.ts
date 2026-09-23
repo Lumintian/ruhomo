@@ -1,4 +1,4 @@
-import { LineCounter, isAlias, isMap, isScalar, isSeq, parseAllDocuments, visit } from 'yaml';
+import { LineCounter, isMap, isScalar, isSeq, parseAllDocuments, visit } from 'yaml';
 import type { Node as YamlNode, YAMLError } from 'yaml';
 import { DiagnosticBag, excerpt } from './diagnostics.ts';
 import { utf8ByteLength } from './encoding.ts';
