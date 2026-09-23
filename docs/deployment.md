@@ -43,7 +43,15 @@ pnpm run deploy                   # = 构建前端 + wrangler deploy（必须带
 
 ### 反向代理与路径前缀
 
-生成的链接形如 `${PUBLIC_BASE_URL}/r/v1/...`。如果你用反向代理把服务挂在 `https://example.com/tools/ruhomo/` 下，请设置 `PUBLIC_BASE_URL=https://example.com/tools/ruhomo`，并由反向代理**去掉前缀**后再转发给 Worker（Worker 始终在根路径提供服务）。
+生成的链接形如 `${PUBLIC_BASE_URL}/r/v1/...`。如果你用反向代理把服务挂在 `https://example.com/tools/ruhomo/` 下，**构建时**同时配置：
+
+```sh
+# apps/worker/wrangler.jsonc 的 vars 中设置：
+# "PUBLIC_BASE_URL": "https://example.com/tools/ruhomo"
+RUHOMO_BASE_PATH=/tools/ruhomo/ pnpm run deploy
+```
+
+`RUHOMO_BASE_PATH` 是 Vite 的构建/开发环境变量（不是 Worker 的 `vars`），必须以 `/` 开头和结尾；默认 `/`。它决定前端静态资源和 `/api/config` 的访问前缀；`PUBLIC_BASE_URL` 决定生成链接的公网基址。两者的路径部分必须一致。反向代理须把 `/tools/ruhomo/*` 的**所有**请求（包括静态资源、`api/*`、`r/*`）去掉前缀后转发给 Worker；Worker 始终在根路径提供服务。请用带末尾斜杠的 `/tools/ruhomo/` 打开页面。修改前缀后需要重新构建前端。运行 `pnpm test:e2e:prefix` 可测试带前缀的浏览器流程。
 
 ## 缓存
 

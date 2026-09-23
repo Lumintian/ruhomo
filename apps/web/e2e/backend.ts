@@ -26,7 +26,7 @@ export interface Upstream {
  * Serves /api/* and /r/* from an in-process Worker app whose upstream is a
  * mutable fake; records every browser request for privacy assertions.
  */
-export async function installBackend(page: Page, upstream: Upstream = { status: 200, body: ACCEPTANCE }) {
+export async function installBackend(page: Page, upstream: Upstream = { status: 200, body: ACCEPTANCE }, basePath = '') {
   const requests: Request[] = [];
   page.on('request', (r) => requests.push(r));
   const app = createApp({
@@ -36,11 +36,12 @@ export async function installBackend(page: Page, upstream: Upstream = { status: 
     }) as typeof fetch,
     log: () => {},
   });
-  const env = { PUBLIC_BASE_URL: PUBLIC_BASE };
+  const env = { PUBLIC_BASE_URL: `${PUBLIC_BASE}${basePath}` };
   await page.route(/\/(api|r)\//, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
-    const res = await app.request(`${url.pathname}${url.search}`, { method: req.method(), headers: req.headers() }, env);
+    const workerPath = url.pathname.startsWith(basePath) ? url.pathname.slice(basePath.length) : url.pathname;
+    const res = await app.request(`${workerPath}${url.search}`, { method: req.method(), headers: req.headers() }, env);
     await route.fulfill({
       status: res.status,
       headers: Object.fromEntries(res.headers.entries()),

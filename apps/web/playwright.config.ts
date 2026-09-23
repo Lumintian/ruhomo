@@ -8,6 +8,7 @@ const PORT = 5199;
 // Chrome instead of the bundled Chromium.
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: 'prefix.spec.ts', // Runs separately with a prefixed Vite base.
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

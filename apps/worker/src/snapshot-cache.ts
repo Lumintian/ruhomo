@@ -34,6 +34,8 @@ export interface CachedSnapshot {
   compilerVersion: string;
   snapshot: Snapshot;
   validatedAt: number;
+  /** Final URL of the successful fetch; absent in snapshots cached before this change. */
+  effectiveUrl?: string | undefined;
   etag?: string | undefined;
   lastModified?: string | undefined;
 }
@@ -257,7 +259,9 @@ export class SnapshotLoader {
   }
 
   private async revalidate(key: string, d: SourceDescriptor, entry: CachedSnapshot | undefined): Promise<SnapshotResult> {
-    const validators = entry ? { etag: entry.etag, lastModified: entry.lastModified } : undefined;
+    const validators = entry?.effectiveUrl
+      ? { url: entry.effectiveUrl, etag: entry.etag, lastModified: entry.lastModified }
+      : undefined;
     const outcome = await this.opts.fetchSource(d, validators);
     let next: CachedSnapshot;
     if (outcome.kind === 'not-modified') {
@@ -273,6 +277,7 @@ export class SnapshotLoader {
         compilerVersion: COMPILER_VERSION,
         snapshot: result.snapshot,
         validatedAt: this.now(),
+        effectiveUrl: outcome.url,
         etag: outcome.etag,
         lastModified: outcome.lastModified,
       };

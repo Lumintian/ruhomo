@@ -41,7 +41,7 @@ async function request(path: string, signal?: AbortSignal): Promise<Response> {
 }
 
 export async function fetchConfig(signal?: AbortSignal): Promise<ConfigResponse> {
-  return (await (await request('/api/config', signal)).json()) as ConfigResponse;
+  return (await (await request(`${import.meta.env.BASE_URL}api/config`, signal)).json()) as ConfigResponse;
 }
 
 export async function fetchInspect(inspectUrl: string, signal?: AbortSignal): Promise<InspectResponse> {

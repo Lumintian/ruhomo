@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:workerd": "pnpm --filter @ruhomo/worker run test:workerd",
     "test:e2e": "pnpm --filter @ruhomo/web run test:e2e",
+    "test:e2e:prefix": "pnpm --filter @ruhomo/web run test:e2e:prefix",
     "test:integration": "node scripts/fetch-mihomo.mjs && vitest run --config tests/integration/vitest.config.ts",
     "bench": "node scripts/bench.ts",
     "build": "pnpm --filter @ruhomo/web run build && pnpm --filter @ruhomo/worker run build",

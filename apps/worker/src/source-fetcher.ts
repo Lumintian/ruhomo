@@ -36,12 +36,14 @@ export class SourceError extends Error {
 }
 
 export interface Validators {
+  /** Final URL that produced the cached representation and its validators. */
+  url: string;
   etag?: string | undefined;
   lastModified?: string | undefined;
 }
 
 export type FetchOutcome =
-  | { kind: 'ok'; text: string; etag: string | undefined; lastModified: string | undefined }
+  | { kind: 'ok'; text: string; url: string; etag: string | undefined; lastModified: string | undefined }
   | { kind: 'not-modified' };
 
 export interface FetchSourceOptions {
@@ -99,7 +101,6 @@ function checkContentType(res: Response): void {
 export async function fetchSource(url: string, opts: FetchSourceOptions): Promise<FetchOutcome> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
-  const conditional = Boolean(opts.validators?.etag || opts.validators?.lastModified);
   try {
     let current = url;
     for (let hop = 0; ; hop++) {
@@ -113,8 +114,10 @@ export async function fetchSource(url: string, opts: FetchSourceOptions): Promis
         'User-Agent': opts.userAgent ?? USER_AGENT,
         Accept: 'text/plain, text/yaml, application/yaml;q=0.9, */*;q=0.1',
       });
-      if (opts.validators?.etag) headers.set('If-None-Match', opts.validators.etag);
-      if (opts.validators?.lastModified) headers.set('If-Modified-Since', opts.validators.lastModified);
+      // Validators describe a representation at one URL, not every hop of a redirect chain.
+      const conditional = opts.validators?.url === current && Boolean(opts.validators.etag || opts.validators.lastModified);
+      if (conditional && opts.validators?.etag) headers.set('If-None-Match', opts.validators.etag);
+      if (conditional && opts.validators?.lastModified) headers.set('If-Modified-Since', opts.validators.lastModified);
 
       let res: Response;
       try {
@@ -163,6 +166,7 @@ export async function fetchSource(url: string, opts: FetchSourceOptions): Promis
       return {
         kind: 'ok',
         text,
+        url: current,
         etag: res.headers.get('etag') ?? undefined,
         lastModified: res.headers.get('last-modified') ?? undefined,
       };

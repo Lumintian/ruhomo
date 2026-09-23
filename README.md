@@ -78,6 +78,7 @@ fixtures/  examples/  docs/  scripts/
 | `pnpm test` | core 与 Worker 的单元/HTTP 测试（Node） |
 | `pnpm test:workerd` | 在 workerd（Miniflare）中运行的 Worker 冒烟测试 |
 | `pnpm test:e2e` | Playwright 前端关键流程（需要本地 Chromium：`pnpm --filter @ruhomo/web exec playwright install chromium`） |
+| `pnpm test:e2e:prefix` | Playwright 路径前缀部署流程（`/tools/ruhomo/`） |
 | `pnpm test:integration` | 下载并校验固定版本 Mihomo 测试内核，运行真实内核集成测试 |
 | `pnpm bench` | 本地基准（Node wall time，不代表 Workers CPU 时间） |
 | `pnpm build` | 构建前端并以 `wrangler deploy --dry-run` 打包 Worker |

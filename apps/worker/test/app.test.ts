@@ -372,6 +372,50 @@ describe('snapshot cache', () => {
     expect(h.calls[1]!.headers.get('if-modified-since')).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
   });
 
+  it('only reuses validators when a redirect still resolves to the same resource', async () => {
+    const oldBody = 'DOMAIN,old.example,DIRECT\n';
+    const newBody = 'DOMAIN,new.example,DIRECT\n';
+    let destination = '/old.txt';
+    const h = harness((url, init) => {
+      if (url === SOURCE_URL) return { status: 302, headers: { location: destination } };
+      const conditional = new Headers(init.headers).get('if-none-match');
+      if (url.endsWith('/old.txt') && conditional === '"v1"') return { status: 304 };
+      if (url.endsWith('/new.txt')) return text(newBody, { etag: '"v1"' });
+      return text(oldBody, { etag: '"v1"' });
+    });
+    const path = providerPath(recipeToken(), 'DIRECT');
+    expect(await (await h.request(path)).text()).toBe('DOMAIN,old.example\n');
+    h.clock.advance(FRESH + 1);
+    expect(await (await h.request(path)).text()).toBe('DOMAIN,old.example\n');
+    expect(h.calls.at(-1)!.headers.get('if-none-match')).toBe('"v1"');
+
+    destination = '/new.txt';
+    h.clock.advance(FRESH + 1);
+    const updated = await h.request(path);
+    expect(updated.headers.get('x-cache-status')).toBe('revalidated');
+    expect(await updated.text()).toBe('DOMAIN,new.example\n');
+    expect(h.calls.at(-1)!.headers.get('if-none-match')).toBeNull();
+    expect(h.calls.at(-2)!.headers.get('if-none-match')).toBeNull();
+  });
+
+  it('rejects a 304 from a different redirect target instead of refreshing the old snapshot', async () => {
+    let destination = '/old.txt';
+    const h = harness((url) => {
+      if (url === SOURCE_URL) return { status: 302, headers: { location: destination } };
+      return url.endsWith('/new.txt') ? { status: 304 } : text('DOMAIN,old.example,DIRECT\n', { etag: '"v1"' });
+    });
+    const path = providerPath(recipeToken(), 'DIRECT');
+    const first = await h.request(path);
+    const validatedAt = first.headers.get('x-validated-at');
+    destination = '/new.txt';
+    h.clock.advance(FRESH + 1);
+    const result = await h.request(path);
+    expect(result.headers.get('x-result-stale')).toBe('true');
+    expect(result.headers.get('x-last-error')).toBe('UPSTREAM_UNEXPECTED_304');
+    expect(result.headers.get('x-validated-at')).toBe(validatedAt);
+    expect(h.calls.at(-1)!.headers.get('if-none-match')).toBeNull();
+  });
+
   it('serves stale results on failure, marks them, and never extends the stale window', async () => {
     let fail = false;
     const h = harness(() => (fail ? { status: 500 } : text(ACCEPTANCE)));
