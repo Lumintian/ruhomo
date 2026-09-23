@@ -10,3 +10,4 @@ export * from './naming.ts';
 export * from './integration.ts';
 export * from './generators/yaml.ts';
 export * from './generators/js.ts';
+export type * from './inspect-types.ts';

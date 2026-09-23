@@ -1,4 +1,4 @@
-import type { Diagnostic, Recipe } from '@ruhomo/core';
+import type { Diagnostic, InspectResponse, Recipe } from '@ruhomo/core';
 import {
   COMPILER_VERSION,
   EMPTY_PROVIDER_BODY,
@@ -11,7 +11,6 @@ import {
   buildRemoteIntegration,
   decodeRecipe,
   decodeTargetToken,
-  encodeRecipe,
   generateJsOverride,
   generateYamlOverride,
   orderTargets,
@@ -277,10 +276,10 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
       const { ordered, ir } = integration(rt, recipe, result);
       const s = result.entry.snapshot;
       const diagnostics: Diagnostic[] = [...s.diagnostics, ...ordered.diagnostics];
-      const body = {
+      const body: InspectResponse = {
         ok: true,
         recipe,
-        recipeToken: encodeRecipe(recipe) === token ? token : encodeRecipe(recipe),
+        recipeToken: token,
         recipeId: recipeId(recipe),
         compilerVersion: s.compilerVersion,
         mihomoBaseline: s.mihomoBaseline,

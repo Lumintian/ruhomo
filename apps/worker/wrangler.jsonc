@@ -3,6 +3,7 @@
   "name": "ruhomo",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-15",
+  "send_metrics": false,
   // One deployment serves the SPA (static assets) and the API.
   // /api/* and /r/* always reach the Worker so they can never be answered by
   // the SPA fallback; everything else is served from ../web/dist.
