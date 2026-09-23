@@ -7,3 +7,6 @@ export * from './compiler.ts';
 export * from './url-policy.ts';
 export * from './recipe.ts';
 export * from './naming.ts';
+export * from './integration.ts';
+export * from './generators/yaml.ts';
+export * from './generators/js.ts';
