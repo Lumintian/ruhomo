@@ -61,6 +61,6 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: .cache/mihomo
-          key: mihomo-v1.19.31-${{ runner.os }}-${{ runner.arch }}
+          key: mihomo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/fetch-mihomo.mjs') }}
       # Downloads the pinned release binary and verifies its SHA-256.
       - run: pnpm test:integration
