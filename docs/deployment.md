@@ -2,11 +2,19 @@
 
 ruhomo 将网页与 API 部署在同一个 Cloudflare Worker，不需要数据库或定时任务。规则文件和 Sub-Store 的使用方法见 [集成说明](integration.md)。
 
-## 1. 选择部署方式
+## 1. 按版本标签发布（推荐）
 
-### 本地构建并部署
+项目由 [GitHub Actions 的发布流程](../.github/workflows/release.yml)在云端构建并部署到 Cloudflare。`main` / PR 上的 CI 只做验证，**只有推送 `vX.Y.Z` 标签才会部署**。开始前：
 
-clone 仓库到本地，安装 Node.js ≥ 22.12 和 `package.json` 指定版本的 pnpm 后，进入仓库根目录执行：
+1. 在 Cloudflare 创建限定目标账号的 [Workers 编辑权限 API Token](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/#api-token)，并取得 Account ID。在 GitHub 仓库的 Secrets（或 `production` Environment Secrets）中分别配置 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`；不要提交凭据。
+2. 若曾连接 [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/build-branches/) 自动部署生产分支，先停用该连接；否则推送 `main` 时仍会部署，绕过标签流程。可在 GitHub 的 `production` Environment 上按需开启发布审批。
+3. 检查 `apps/worker/wrangler.jsonc` 的 Worker 名称及公网地址；如需路径前缀，按下文设置构建变量。
+
+维护者按 [开发指南的发布步骤](development.md#发布新版本) 推送版本标签后，GitHub Actions 会检查并测试该提交，通过后在云端构建网页与 Worker、部署到 Cloudflare。发布状态在仓库的 Actions 页面查看，部署地址以 Wrangler 输出为准。
+
+### 手动从本地部署（不经过标签审批）
+
+如需临时手动部署，在本地 clone 仓库，安装 Node.js ≥ 22.12 和 `package.json` 指定版本的 pnpm，然后在仓库根目录运行：
 
 ```sh
 pnpm install --frozen-lockfile
@@ -14,20 +22,7 @@ pnpm --filter @ruhomo/worker exec wrangler login
 pnpm run deploy
 ```
 
-第一条在本地安装依赖；第二条打开浏览器登录你的 Cloudflare 账号；第三条在本地构建，再将网页和 API **上传到 Cloudflare Workers**。需要更改 Worker 名称时，应在运行第三条命令前编辑 `apps/worker/wrangler.jsonc` 的 `name`。只想本地检查构建可运行 `pnpm build`，不会上传。不要用裸 `pnpm deploy`，那是 pnpm 的内置命令。部署地址以 Wrangler 输出为准。
-
-### Cloudflare 云端构建并部署
-
-也可使用 [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/) 进行云端构建及部署：将仓库推送到 GitHub 或 GitLab，在 Cloudflare 控制台连接仓库及生产分支，设置如下（本项目是 pnpm workspace，**根目录使用仓库根目录**）：
-
-| 设置 | 值 |
-|---|---|
-| Root directory | 仓库根目录（默认） |
-| Build command | `pnpm --filter @ruhomo/web run build` |
-| Deploy command | `pnpm --filter @ruhomo/worker run deploy` |
-| Build variable | `PNPM_VERSION=12.5.1`（与 `package.json` 一致） |
-
-Cloudflare 会在构建环境安装依赖、构建前端，再运行 Wrangler 部署 Worker 和静态资源。若要使用路径前缀，另在构建变量中设置 `RUHOMO_BASE_PATH`（见下文）。[构建环境版本说明](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/)列出了可设置的 Node.js 和 pnpm 版本。
+`pnpm run deploy` 会在本地构建并实际上传网页与 API；`pnpm build` 仅做构建和部署预检查，不上传。不要用裸 `pnpm deploy`（pnpm 内置命令）。**手动部署会绕过标签发布流程**，正常发布请使用上面的 GitHub Actions。
 
 默认仅能读取 GitHub / Gist 上公开的 HTTPS raw 规则文件。其他来源及自定义域名的设置见下文。
 
@@ -63,13 +58,9 @@ curl -fsS "$BASE/api/config"   # 检查 publicBaseUrl、allowlist 和资源限�
 若反向代理对外提供 `https://example.com/tools/ruhomo/`，同时设置：
 
 1. `PUBLIC_BASE_URL` 为 `https://example.com/tools/ruhomo`；
-2. 构建时的前端环境变量 `RUHOMO_BASE_PATH`：
+2. GitHub Actions 发布时，在 GitHub `production` Environment 的 Variables 中设置 `RUHOMO_BASE_PATH=/tools/ruhomo/`；手动本地部署则运行 `RUHOMO_BASE_PATH=/tools/ruhomo/ pnpm run deploy`。
 
-   ```sh
-   RUHOMO_BASE_PATH=/tools/ruhomo/ pnpm run deploy
-   ```
-
-代理须将该前缀下的**静态资源、`api/*` 和 `r/*` 请求**去掉前缀后交给 Worker。访问页面用末尾带 `/` 的地址。`RUHOMO_BASE_PATH` 默认 `/`，必须以 `/` 开头和结尾；它不是 Worker 的 `vars`，修改后需重新构建。可用 `pnpm test:e2e:prefix` 检查这一流程。
+代理须将该前缀下的**静态资源、`api/*` 和 `r/*` 请求**去掉前缀后交给 Worker。访问页面用末尾带 `/` 的地址。`RUHOMO_BASE_PATH` 默认 `/`，必须以 `/` 开头和结尾；它是构建时的前端变量，**不是** Worker 的 `vars`，修改后需重新构建。可用 `pnpm test:e2e:prefix` 检查这一流程。
 
 ## 免费版与运行限制
 

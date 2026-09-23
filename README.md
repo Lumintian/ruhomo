@@ -24,7 +24,9 @@
 
 ## 自行部署
 
-可选择 **Cloudflare Workers Builds 云端构建**（连接 Git 仓库后自动部署），或在本地构建并部署。以下是本地方式：准备 Cloudflare 账号、Node.js ≥ 22.12 和 `package.json` 指定版本的 pnpm，然后在仓库根目录运行：
+推荐通过 **GitHub Actions 按版本标签部署**：维护者推送标签后，在云端检查、构建和发布。Cloudflare 凭据与部署设置见 [部署指南](docs/deployment.md)；如何创建版本及标签见 [开发指南](docs/development.md#发布新版本)。
+
+也可手动从本地部署（会绕过标签流程）：准备 Cloudflare 账号、Node.js ≥ 22.12 和 `package.json` 指定版本的 pnpm，在仓库根目录运行：
 
 ```sh
 pnpm install --frozen-lockfile
@@ -32,7 +34,7 @@ pnpm --filter @ruhomo/worker exec wrangler login
 pnpm run deploy
 ```
 
-`pnpm run deploy` **会实际部署**网页与 API；只想本地检查构建请运行 `pnpm build`。云端构建所需的 Build / Deploy 命令、自定义域名和免费版限制见 [部署指南](docs/deployment.md)。
+`pnpm run deploy` **会实际部署**网页与 API；只想本地检查构建请运行 `pnpm build`。自定义域名、路径前缀和免费版限制见 [部署指南](docs/deployment.md)。
 
 ## 文档
 
