@@ -1,6 +1,6 @@
 {
   "name": "ruhomo",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Convert an extra Mihomo rules list into per-target HTTP rule-providers and Sub-Store YAML/JS overrides.",
   "license": "MIT",
