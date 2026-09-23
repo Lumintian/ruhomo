@@ -1,98 +1,104 @@
-# 部署（Cloudflare Workers + Static Assets）
+# 部署指南
 
-一次部署同时提供前端静态资源与 API，不需要 KV、D1、Durable Objects 等任何 binding。
+ruhomo 将网页与 API 部署在同一个 Cloudflare Worker，不需要数据库或定时任务。规则文件和 Sub-Store 的使用方法见 [集成说明](integration.md)。
 
-## 步骤
+## 1. 选择部署方式
+
+### 本地构建并部署
+
+clone 仓库到本地，安装 Node.js ≥ 22.12 和 `package.json` 指定版本的 pnpm 后，进入仓库根目录执行：
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm exec wrangler login          # 在 apps/worker 目录或用 pnpm --filter 执行均可
-# 按需编辑 apps/worker/wrangler.jsonc 的 name / vars
-pnpm run deploy                   # = 构建前端 + wrangler deploy（必须带 run，裸 pnpm deploy 是 pnpm 内置命令）
+pnpm --filter @ruhomo/worker exec wrangler login
+pnpm run deploy
 ```
 
-`pnpm build` 只做本地构建与 `wrangler deploy --dry-run` 打包检查，不会上传任何东西。本仓库**没有**替你执行过真实部署。
+第一条在本地安装依赖；第二条打开浏览器登录你的 Cloudflare 账号；第三条在本地构建，再将网页和 API **上传到 Cloudflare Workers**。需要更改 Worker 名称时，应在运行第三条命令前编辑 `apps/worker/wrangler.jsonc` 的 `name`。只想本地检查构建可运行 `pnpm build`，不会上传。不要用裸 `pnpm deploy`，那是 pnpm 的内置命令。部署地址以 Wrangler 输出为准。
 
-## 路由边界
+### Cloudflare 云端构建并部署
 
-| 路径 | 处理者 |
+也可使用 [Cloudflare Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/) 进行云端构建及部署：将仓库推送到 GitHub 或 GitLab，在 Cloudflare 控制台连接仓库及生产分支，设置如下（本项目是 pnpm workspace，**根目录使用仓库根目录**）：
+
+| 设置 | 值 |
 |---|---|
-| `/api/*`、`/r/*` | 永远先进入 Worker（`assets.run_worker_first`）；未知路径返回 JSON 404，不会被 SPA fallback 变成 200 HTML |
-| 其它路径 | 静态资源；找不到时返回 `index.html`（SPA） |
+| Root directory | 仓库根目录（默认） |
+| Build command | `pnpm --filter @ruhomo/web run build` |
+| Deploy command | `pnpm --filter @ruhomo/worker run deploy` |
+| Build variable | `PNPM_VERSION=12.5.1`（与 `package.json` 一致） |
 
-静态资源的 CSP、`nosniff`、`Referrer-Policy: no-referrer` 等由 `apps/web/public/_headers` 下发；Worker 的 JSON/文本响应自带 `default-src 'none'` 的 CSP 与 `nosniff`。
+Cloudflare 会在构建环境安装依赖、构建前端，再运行 Wrangler 部署 Worker 和静态资源。若要使用路径前缀，另在构建变量中设置 `RUHOMO_BASE_PATH`（见下文）。[构建环境版本说明](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/)列出了可设置的 Node.js 和 pnpm 版本。
 
-## 环境变量（`wrangler.jsonc` → `vars`）
+默认仅能读取 GitHub / Gist 上公开的 HTTPS raw 规则文件。其他来源及自定义域名的设置见下文。
 
-| 变量 | 默认 | 范围 | 说明 |
-|---|---|---|---|
-| `PUBLIC_BASE_URL` | 空 | http(s) URL | 生成绝对链接用的基址，可含路径前缀，末尾斜杠会被规范化。为空时使用请求本身的 origin。**不读取 `X-Forwarded-Host`**。使用自定义域名时务必设置 |
-| `SOURCE_ALLOWLIST` | `raw.githubusercontent.com,gist.githubusercontent.com` | 逗号分隔 | 精确主机名或 `*.example.com`（只匹配严格子域名，不含 `example.com` 本身）。没有后缀/子串匹配 |
-| `CACHE_FRESH_SECONDS` | 60 | 0–3600 | 成功快照免验证期 |
-| `CACHE_STALE_SECONDS` | 86400 | 0–604800 | 源失败时可回退旧成功结果的最长时间（从最近一次成功验证起算） |
-| `FETCH_TIMEOUT_MS` | 10000 | 1000–30000 | 整个获取（含重定向）的总超时 |
-| `MAX_REDIRECTS` | 3 | 0–5 | 每跳重新校验协议、主机与限制 |
-| `MAX_SOURCE_BYTES` | 262144 | 1 KiB–1 MiB | 解压后实际读取字节上限（流式计数，不只信 Content-Length） |
-| `MAX_RULES` | 5000 | 1–20000 | |
-| `MAX_TARGETS` | 128 | 1–512 | |
-| `MAX_RULE_BYTES` | 16384 | 256–65536 | 单条规则 |
+## 2. 部署后检查
 
-这些都是防滥用上限，不是性能保证；访问者无法通过 URL 修改它们。配置非法时服务返回 `500 CONFIG_ERROR`，不暴露细节。
-
-不要把任何 secret 写进 `wrangler.jsonc`；本项目本身不需要 secret。本地开发可复制 `apps/worker/.dev.vars.example` 为 `.dev.vars`（已被 git 忽略）。
-
-### 反向代理与路径前缀
-
-生成的链接形如 `${PUBLIC_BASE_URL}/r/v1/...`。如果你用反向代理把服务挂在 `https://example.com/tools/ruhomo/` 下，**构建时**同时配置：
+把 `BASE` 改为自己的部署地址；若部署在路径前缀下，填入完整前缀（例如 `https://example.com/tools/ruhomo`）：
 
 ```sh
-# apps/worker/wrangler.jsonc 的 vars 中设置：
-# "PUBLIC_BASE_URL": "https://example.com/tools/ruhomo"
-RUHOMO_BASE_PATH=/tools/ruhomo/ pnpm run deploy
+BASE=https://ruhomo.example.net
+curl -fsS "$BASE/api/health"   # 应返回 ok: true 和 compilerVersion
+curl -fsS "$BASE/api/config"   # 检查 publicBaseUrl、allowlist 和资源限制
 ```
 
-`RUHOMO_BASE_PATH` 是 Vite 的构建/开发环境变量（不是 Worker 的 `vars`），必须以 `/` 开头和结尾；默认 `/`。它决定前端静态资源和 `/api/config` 的访问前缀；`PUBLIC_BASE_URL` 决定生成链接的公网基址。两者的路径部分必须一致。反向代理须把 `/tools/ruhomo/*` 的**所有**请求（包括静态资源、`api/*`、`r/*`）去掉前缀后转发给 Worker；Worker 始终在根路径提供服务。请用带末尾斜杠的 `/tools/ruhomo/` 打开页面。修改前缀后需要重新构建前端。运行 `pnpm test:e2e:prefix` 可测试带前缀的浏览器流程。
+然后打开网页，转换一个公开的示例规则文件，确认生成链接的域名和 provider 内容。无需向 ruhomo 提供完整 Mihomo 配置。
 
-## 缓存
+| 现象 | 优先检查 |
+|---|---|
+| 页面资源或 `/api/config` 404 | 代理转发、路径前缀及 `RUHOMO_BASE_PATH` |
+| `403 SOURCE_URL_REJECTED` | 源地址和每次重定向的域名是否在白名单中 |
+| `422 SOURCE_INVALID` | 文件是否为带出站目标的额外规则，而非完整配置或 provider `payload`；查看转换诊断 |
+| `502` / `504` | 上游响应、文件大小、重定向及超时 |
+| `429` 或 CPU 超限 | 限流设置、请求量、规则规模及 Cloudflare 面板的 CPU 指标 |
 
-- 按需获取，没有 scheduler；Mihomo 的 `interval` 是消费者的刷新周期，不是本服务的抓取周期。
-- isolate 内有界内存缓存 + 同源并发合并；可用时再把完整成功快照写入 Cache API（`caches.default`，按数据中心）。Cache API 不可用或出错时功能仍然正确，只是命中率下降。在 `*.workers.dev` 上 Cache API 可能不生效，建议绑定自定义域名。
-- 这是 best-effort 缓存，**不是**持久化的 Last Known Good：快照可能随时被驱逐，此时源失败就会返回非 2xx（provider 端 Mihomo 会保留上次成功下载的内容）。
-- 更新延迟 = 上游 CDN 缓存（raw.githubusercontent.com 约数分钟）+ 本服务 fresh 期 + Mihomo `interval`。
+## 按需调整地址与来源
 
-## 限流
+配置都写在 `apps/worker/wrangler.jsonc` 的 `vars` 中，修改后需重新部署：
 
-Workers 内存计数器不是全局限流，本项目不提供那种“限流”。可选：
+- **自定义域名**：设置 `PUBLIC_BASE_URL`，例如 `https://ruhomo.example.net`，使生成的覆写和 provider 链接固定指向该域名。留空则使用请求的 origin。
+- **其他规则来源**：在 `SOURCE_ALLOWLIST` 中添加域名（逗号分隔）。支持精确主机名或 `*.example.com`（仅匹配子域名）；重定向到的域名也必须允许。不要把凭据写进源 URL 或提交到配置文件。
 
-1. 在 Cloudflare 面板为该域名配置 WAF Rate Limiting 规则（推荐，作用于全局）。
-2. 启用 Workers Rate Limiting binding：取消 `wrangler.jsonc` 中 `ratelimits` 示例的注释，binding 名为 `RATE_LIMITER`。Worker 会以 `CF-Connecting-IP` 为 key 调用它，超限返回 429。该 binding 的计数是按 Cloudflare 位置近似的，请按其文档理解精度。
+### 部署在路径前缀下
 
-## 日志与隐私
+若反向代理对外提供 `https://example.com/tools/ruhomo/`，同时设置：
 
-- Worker 只输出事件名、错误码和截断摘要（如源描述符哈希前 12 位），不记录源正文、完整源 URL、recipe token、规则或请求头。
-- `wrangler.jsonc` 默认 `observability.enabled: false`：Workers Logs 的调用日志会记录请求 URL，而 URL 中含有 recipe token（可解码出源 URL）。若启用，请知悉这一点并控制日志访问权限。
-- 即使本项目不记录，Cloudflare 或你前面的反向代理仍可能记录访问 URL；请按你的平台设置日志保留与访问策略。
-- 服务部署者可以看到被提交转换的额外规则（这正是 URL 模式的工作方式）；粘贴模式在浏览器本地完成，不经过服务端。
+1. `PUBLIC_BASE_URL` 为 `https://example.com/tools/ruhomo`；
+2. 构建时的前端环境变量 `RUHOMO_BASE_PATH`：
 
-## 资源与性能
+   ```sh
+   RUHOMO_BASE_PATH=/tools/ruhomo/ pnpm run deploy
+   ```
 
-本地基准（`pnpm bench`）——**Node wall time，不是 Workers CPU 时间**：
+代理须将该前缀下的**静态资源、`api/*` 和 `r/*` 请求**去掉前缀后交给 Worker。访问页面用末尾带 `/` 的地址。`RUHOMO_BASE_PATH` 默认 `/`，必须以 `/` 开头和结尾；它不是 Worker 的 `vars`，修改后需重新构建。可用 `pnpm test:e2e:prefix` 检查这一流程。
 
-环境：本地 Node.js 环境测得；设备信息不公开，数据仅供粗略参考。
+## 免费版与运行限制
 
-| 规则数 | 源大小 KiB | 冷编译中位数 ms | p95 ms | 热缓存 provider 中位数 ms | 热缓存 override.js 中位数 ms |
-|---:|---:|---:|---:|---:|---:|
-| 100 | 4.7 | 1.24 | 2.47 | 0.140 | 0.245 |
-| 1000 | 48.3 | 7.51 | 11.20 | 0.145 | 0.239 |
-| 5000 | 245.3 | 34.31 | 44.03 | 0.404 | 0.281 |
+根据 [Cloudflare Workers 限额](https://developers.cloudflare.com/workers/platform/limits/)和[静态资源计费说明](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)，Workers Free 的主要限制包括每次请求 **10 ms CPU**、每天 **100,000 次 Worker 请求**；页面静态资源请求不计入该额度，`/api/*` 和 `/r/*` 请求会计入。额度会变化，部署时以官方文档和控制台为准。
 
-解读与限制：
+每天的 provider 请求可粗估为「目标数 × Mihomo 客户端数 × 86,400 ÷ provider 更新间隔（秒）」，另加预览和覆写请求。例如 5 个目标、1 个客户端、每小时更新约 120 次/日。冷缓存还要抓取、解析和编译规则，可能先触及 CPU 限制。`pnpm bench` 测的是本机 Node.js 墙钟时间，**不是 Workers CPU 时间**。建议先以少量规则试运行，在 Cloudflare 面板观察冷请求 CPU、失败率和请求量。
 
-- 冷缓存请求的主要成本是解析 + 编译；热缓存请求只做视图派生与 ETag 计算。
-- Workers Free 计划的 CPU 限制远低于上表中大源的冷编译耗时量级；**上千条规则的源在 Free 计划上冷缓存时可能超出 CPU 限制**。本项目**尚未在 Cloudflare 上实测** CPU 时间。部署后可在 Cloudflare 面板的 Workers 指标中查看实际 CPU time；需要时改用付费计划或减小规则文件。
-- Worker 打包体积（`pnpm build` 输出）约 1.1 MiB，gzip 约 205 KiB。
+Worker 仅在收到请求时抓取源文件。更新延迟还取决于上游 CDN、本服务缓存和 Mihomo 的 provider 更新间隔。内存缓存和可选的 Cache API 都不保证跨实例、跨机房同步；失败时只有在容错窗口内才会返回旧快照，否则返回错误，Mihomo 会保留上次成功下载的内容。本项目尚未在真实 Cloudflare 边缘实测 CPU、缓存命中或限流效果。
 
-## 未执行 / 受限的验证
+## 配置参考
 
-- 没有云部署凭据：未执行真实 `wrangler deploy`，未在 Cloudflare 边缘上测量 CPU、Cache API 命中或限流 binding。
-- Cache API 行为只在本地 workerd（Miniflare）中验证（`pnpm test:workerd`）。
+下列变量位于 `apps/worker/wrangler.jsonc` 的 `vars` 中；本地开发可复制 `apps/worker/.dev.vars.example` 为已忽略的 `.dev.vars`。数值上限用于防滥用，**不是**当前套餐的性能保证。
+
+| 变量 | 默认值 | 用途与范围 |
+|---|---|---|
+| `PUBLIC_BASE_URL` | 空 | 生成链接的公网地址；可含路径前缀，空值取请求 origin |
+| `SOURCE_ALLOWLIST` | `raw.githubusercontent.com,gist.githubusercontent.com` | 允许获取规则的域名，逗号分隔 |
+| `CACHE_FRESH_SECONDS` | `60` | 成功快照的免验证期，0–3600 秒 |
+| `CACHE_STALE_SECONDS` | `86400` | 失败后可回退旧快照的最长时间，0–604800 秒 |
+| `FETCH_TIMEOUT_MS` | `10000` | 含重定向的上游请求超时，1000–30000 毫秒 |
+| `MAX_REDIRECTS` | `3` | 最多重定向次数，0–5 |
+| `MAX_SOURCE_BYTES` | `262144` | 源文件字节上限，1024–1048576 |
+| `MAX_RULES` | `5000` | 规则条数上限，1–20000 |
+| `MAX_TARGETS` | `128` | 出站目标数量上限，1–512 |
+| `MAX_RULE_BYTES` | `16384` | 单条规则字节上限，256–65536 |
+
+配置无效时，相关接口返回 `500 CONFIG_ERROR`，不会回显配置细节。
+
+## 限流与隐私
+
+- 项目不提供全局限流。公开实例可按 Cloudflare 套餐配置 WAF Rate Limiting，或启用 `wrangler.jsonc` 中的 `RATE_LIMITER` 示例；后者按 Cloudflare 位置近似计数。
+- Worker 自己不记录规则正文、完整源 URL 或 recipe token，且默认关闭 `observability`。**访问 URL 中的 recipe token 可逆**；若启用 Workers Logs，或经由其他代理，URL 仍可能被记录。不要公开真实覆写链接、截图或测试日志。详见 [安全策略](../SECURITY.md)。
