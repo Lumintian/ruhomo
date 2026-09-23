@@ -31,6 +31,7 @@
   "packageManager": "pnpm@12.5.1",
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@ruhomo/core": "workspace:*",
     "@types/node": "24.9.2",
     "eslint": "10.11.0",
     "eslint-plugin-react-hooks": "7.1.1",
