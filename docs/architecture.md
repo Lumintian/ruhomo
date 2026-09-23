@@ -12,52 +12,61 @@
            apps/web (React)                          apps/worker (Hono) ── source-fetcher ── snapshot-cache
 ```
 
-core 只依赖 `yaml` 与 `zod`，以及所有运行时都有的 `TextEncoder`/`TextDecoder`/`URL`。SHA-256 在 core 中以纯 TS 同步实现，因此命名在非安全上下文的浏览器中也可用。core 在浏览器、Node 测试和 Workers 中运行同一份代码。
+浏览器、Node 测试和 Workers 运行的是同一份 core 代码。core 仅依赖 `yaml` 与 `zod`，以及所有运行时均提供的 `TextEncoder`、`TextDecoder` 和 `URL`。SHA-256 在 core 中以纯 TypeScript 同步实现，因此即使在非安全上下文的浏览器中也能生成名称。
 
 ## 数据流
 
-1. **document-parser**：去 BOM、处理 CRLF，按确定规则识别格式（`auto`），得到 `RuleLine[]`（原文、行、列、序号）。YAML 解析失败就是失败，绝不回退为 text。
-2. **rule-parser**：独立实现 Mihomo 字段切分语义，校验类型/参数/载荷，产出 `ParsedRule`（含去掉目标后的 `providerRule` 与结构化 warning）。
-3. **compiler**：全部行解析完成且无 error 才分组；任何 error 使整次编译失败，没有半成品。结果是不可变的 `Snapshot`：`sourceDigest`、`compilerVersion`、`mihomoBaseline`、首次出现顺序的目标组、每组 provider 正文、warning。
-4. **orderTargets**：应用 recipe 的 `targetOrder`（不存在的项只告警、不创建 provider），并在分组改变了规则相对位置时告警。
-5. **Integration IR**：provider 定义 + 有序 `RULE-SET` 条目 + 命名空间 + 传输方式（`http` / `inline`）。YAML 与 JS 生成器都只消费 IR。
-6. **Worker**：`/r/v1/{R}/...` 所有端点共用同一个 snapshot 加载器，按源描述符（URL + 格式 + 编译器版本 + 限制）获取和编译一次，再派生各个视图。
+1. **document-parser**：去除 BOM、统一 CRLF 换行，按确定的规则识别格式（`auto`），输出 `RuleLine[]`（包含原文、行号、列号和序号）。YAML 解析失败即视为失败，绝不回退为纯文本解析。
+2. **rule-parser**：独立实现 Mihomo 的字段切分语义，校验规则类型、参数和载荷，输出 `ParsedRule`（包括去掉目标后的 `providerRule` 以及结构化的 warning）。
+3. **compiler**：所有行解析完成且没有 error 时才进行分组；只要存在 error，整次编译即失败，不会产出不完整的结果。编译结果是不可变的 `Snapshot`，包含 `sourceDigest`、`compilerVersion`、`mihomoBaseline`、按首次出现顺序排列的目标分组、各组的 provider 正文以及 warning。
+4. **orderTargets**：应用 recipe 中的 `targetOrder`（对不存在的目标只发出警告，不会为其创建 provider）；如果分组改变了规则间的相对顺序，也会发出警告。
+5. **Integration IR**：由 provider 定义、有序的 `RULE-SET` 条目、命名空间和传输方式（`http` / `inline`）组成。YAML 与 JS 生成器都只消费 IR。
+6. **Worker**：`/r/v1/{R}/...` 下的所有端点共用同一个 snapshot 加载器。它以源描述符（URL + 格式 + 编译器版本 + 限制）为键，只获取和编译一次，再从结果派生出各个视图。
 
 ## 标识
 
-- recipe token `R` = 无填充 Base64url(UTF-8(按 key 排序的规范 JSON))。解码只接受规范编码，因此一个 recipe 只有一个 token。
-- 目标 token `T` = Base64url(UTF-8(原始目标名))，可逆，所以目标从源中消失后服务仍知道请求的是谁，并返回合法空集合。
-- provider 名称 `mrp-{recipeId}-{targetId}`：两段各取域分离 SHA-256 的前 128 bit，只依赖 recipe 与原始目标名；检测碰撞而非假设不会碰撞。
-- 源 URL 用 WHATWG URL 解析一次，其 `href` 同时用于安全校验、实际获取和标识，不排序查询参数、不改写路径编码。
+- **recipe token `R`**：无填充 Base64url(UTF-8(按 key 排序的规范 JSON))。解码时只接受规范编码，因此每个 recipe 只对应唯一的 token。
+- **目标 token `T`**：Base64url(UTF-8(原始目标名))。由于可逆，即使目标已从源中消失，服务仍能识别所请求的目标，并返回合法的空集合。
+- **provider 名称**：格式为 `mrp-{recipeId}-{targetId}`，两段分别取域分离 SHA-256 的前 128 bit，只依赖 recipe 和原始目标名。实现中会主动检测碰撞，而非假设不会碰撞。
+- **源 URL**：使用 WHATWG URL 解析一次，所得的 `href` 同时用于安全校验、实际获取和标识计算。不对查询参数排序，也不改写路径编码。
 
 ## 缓存与失败语义
 
-`SnapshotLoader`（apps/worker/src/snapshot-cache.ts）：
+`SnapshotLoader`（`apps/worker/src/snapshot-cache.ts`）按以下状态处理请求：
 
 | 状态 | 行为 |
 |---|---|
-| 无快照 | 获取 + 编译；失败 → 非 2xx |
-| `now - validatedAt < fresh` | 直接使用 |
-| 超过 fresh | 带 `If-None-Match`/`If-Modified-Since` 有超时的重新验证；304 仅在持有对应快照时接受 |
-| 重新验证失败且在容错窗口内 | 返回旧快照，`X-Result-Stale: true` + `X-Last-Error` |
-| 超过容错窗口或已被驱逐 | 非 2xx |
+| 无快照 | 获取并编译；失败则返回非 2xx |
+| `now - validatedAt < fresh` | 直接使用现有快照 |
+| 超过 fresh 期 | 携带 `If-None-Match` / `If-Modified-Since` 发起有超时的重新验证；仅在持有对应快照时才接受 304 |
+| 重新验证失败，但仍在容错窗口内 | 返回旧快照，并附带 `X-Result-Stale: true` 和 `X-Last-Error` |
+| 超出容错窗口，或快照已被驱逐 | 返回非 2xx |
 
-- `validatedAt` 只在成功时更新，失败不会延长容错期限，也不会覆盖成功快照。
-- 只缓存完整成功快照；错误不作为结果缓存（仅有 5 秒的单源失败退避，退避期间仍返回旧快照或错误）。
-- 层次：isolate 内有界 LRU + 同源并发合并；可选 Cache API（按数据中心，尽力而为）。都不是跨 isolate/跨机房锁，也不提供跨 provider 的原子切换。
-- 只有在源已成功验证后，缺失的目标才返回 `200 # empty`；源 404、超时、空响应永远不会变成空集合。
+补充说明：
+
+- `validatedAt` 只在成功时更新。失败既不会延长容错期限，也不会覆盖成功的快照。
+- 只缓存完整的成功快照，错误结果不会被缓存。唯一的例外是针对单个源的 5 秒失败退避，退避期间仍会返回旧快照或错误。
+- 缓存分两层：isolate 内的有界 LRU（同时合并对同一源的并发请求），以及可选的 Cache API（按数据中心划分，尽力而为）。两者都不是跨 isolate 或跨数据中心的锁，也不提供跨 provider 的原子切换。
+- 只有在源已成功验证的前提下，缺失的目标才会返回 `200 # empty`。源返回 404、超时或空响应时，永远不会被当作空集合。
 
 ## 路由边界
 
-`wrangler.jsonc` 的 `assets.run_worker_first: ["/api/*", "/r/*"]` 保证这两类路径总是进入 Worker；Worker 内对未知的 `/api/*`、`/r/*` 返回 JSON 404，绝不落到 SPA fallback。其它路径由静态资源（SPA 模式）处理。
+`wrangler.jsonc` 中的 `assets.run_worker_first: ["/api/*", "/r/*"]` 确保这两类路径始终由 Worker 处理。对于未知的 `/api/*` 和 `/r/*` 路径，Worker 返回 JSON 格式的 404，绝不会落入 SPA fallback。其他路径均由静态资源（SPA 模式）处理。
 
-## 为什么是这些选择
+## 设计取舍
 
-- **无数据库 recipe**：第一版不需要账号或存储，链接自描述；代价是链接较长且可解码源 URL（已在 UI 与文档中提示）。
-- **严格于内核的解析**：真实内核会静默接受很多错误输入（见 [compatibility.md](compatibility.md) 的探针结果），而 provider 中的坏行只会被内核警告并跳过，用户难以察觉；因此在转换阶段就整体失败。
-- **远程覆写不含规则内容**：保证只改组内规则时覆写正文不变，Sub-Store 侧无需任何动作。
-- **ES5 JS 覆写**：`function main(config)` 形式，数据以转义后的 JSON 嵌入，不依赖任何运行库或网络。
+- **recipe 无需数据库**：第一版不需要账号或存储，链接本身即包含全部描述信息。代价是链接较长，且可从中解码出源 URL（UI 与文档中均已提示）。
+- **解析比内核更严格**：真实内核会静默接受许多错误输入（见[兼容性文档](compatibility.md)中的探针结果），而 provider 中的错误行只会被内核警告并跳过，用户很难察觉。因此 ruhomo 选择在转换阶段就让整次转换失败。
+- **远程覆写不含规则内容**：这样可以保证只修改组内规则时，覆写正文保持不变，Sub-Store 侧无需任何操作。
+- **ES5 JS 覆写**：采用 `function main(config)` 形式，数据以转义后的 JSON 嵌入，不依赖任何运行库或网络。
 
-## 未来可能的扩展（第一版未实现，也没有空实现）
+## 后续可能的扩展
 
-持久化 Last Known Good（KV/D1/Durable Objects）、短链接、目标别名、需凭据的私有源、MRS/domain/ipcidr 拆分、其它云平台适配器。
+以下功能第一版尚未实现，代码中也没有预留空实现：
+
+- 持久化的 Last Known Good（KV、D1 或 Durable Objects）
+- 短链接
+- 目标别名
+- 需要凭据的私有源
+- MRS 格式以及 domain / ipcidr 拆分
+- 其他云平台适配器
